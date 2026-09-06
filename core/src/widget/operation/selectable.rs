@@ -1,4 +1,5 @@
 //! Operate on widgets that can have a text selection.
+use crate::mouse;
 use crate::widget::{Id, Operation};
 use crate::{Point, Rectangle};
 
@@ -91,6 +92,26 @@ pub trait Selectable {
                 prev -= 1;
             }
             prev
+        }
+    }
+
+    /// The whole word or visual line around `byte`, for a drag that
+    /// extends by more than a character.
+    ///
+    /// A double click picks a word and a triple click a line; holding the
+    /// button and dragging on keeps that granularity, so the selection
+    /// grows word by word or line by line rather than snapping back to
+    /// single characters. `Single` snaps to nothing.
+    fn snap_bounds(&self, byte: usize, kind: mouse::click::Kind) -> (usize, usize) {
+        match kind {
+            mouse::click::Kind::Single => (byte, byte),
+            mouse::click::Kind::Double => {
+                (self.step_byte_word(byte, -1), self.step_byte_word(byte, 1))
+            }
+            mouse::click::Kind::Triple => (
+                self.line_edge_byte(byte, -1).unwrap_or(0),
+                self.line_edge_byte(byte, 1).unwrap_or(self.text_len()),
+            ),
         }
     }
 

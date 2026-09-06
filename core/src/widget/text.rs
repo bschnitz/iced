@@ -237,6 +237,13 @@ struct Internal<P: Paragraph> {
     /// repeated presses within iced's threshold escalate Single →
     /// Double → Triple.
     last_click: Option<mouse::Click>,
+    /// Granularity the running drag extends by: `None` for characters,
+    /// `Double` for whole words, `Triple` for whole lines.
+    granularity: Option<mouse::click::Kind>,
+    /// The word or line the drag started on. Kept whole so a drag back
+    /// past its start swings the anchor to its far edge rather than
+    /// eating into it.
+    origin: Option<(usize, usize)>,
 }
 
 impl<P: Paragraph> Default for Internal<P> {
@@ -249,6 +256,8 @@ impl<P: Paragraph> Default for Internal<P> {
             focused: false,
             externally_managed: false,
             last_click: None,
+            granularity: None,
+            origin: None,
         }
     }
 }
@@ -419,19 +428,20 @@ where
                         mouse::click::Kind::Single => {
                             state.selection = Some((cursor_at, cursor_at));
                             state.selecting = true;
+                            state.granularity = None;
+                            state.origin = None;
                         }
-                        mouse::click::Kind::Double => {
-                            let start = state.step_byte_word(cursor_at, -1);
-                            let end = state.step_byte_word(cursor_at, 1);
+                        kind @ (mouse::click::Kind::Double
+                        | mouse::click::Kind::Triple) => {
+                            // The drag stays alive after a word or line
+                            // click and carries that granularity with it:
+                            // holding the button and pulling on grows the
+                            // selection whole words or whole lines at a time.
+                            let (start, end) = state.snap_bounds(cursor_at, kind);
                             state.selection = Some((start, end));
-                            state.selecting = false;
-                        }
-                        mouse::click::Kind::Triple => {
-                            let len = state.text.len();
-                            let start = state.line_edge_byte(cursor_at, -1).unwrap_or(0);
-                            let end = state.line_edge_byte(cursor_at, 1).unwrap_or(len);
-                            state.selection = Some((start, end));
-                            state.selecting = false;
+                            state.selecting = true;
+                            state.granularity = Some(kind);
+                            state.origin = Some((start, end));
                         }
                     }
 
@@ -448,16 +458,29 @@ where
                 }
             }
             Event::Mouse(mouse::Event::CursorMoved { .. }) if !externally_managed => {
+                use crate::widget::operation::Selectable;
+
                 let state = tree.state.downcast_mut::<Internal<Renderer::Paragraph>>();
 
                 if state.selecting
                     && let Some(position) = cursor_in_bounds
                     && let Some(hit) = state.paragraph.raw().hit_test(position)
                 {
-                    let new_focus = hit.cursor();
-                    if let Some((anchor, focus)) = state.selection
-                        && focus != new_focus
-                    {
+                    let hit_byte = hit.cursor();
+                    // A word- or line-grained drag keeps the anchor at the
+                    // far edge of the word it started on and snaps the
+                    // moving end to a word edge too.
+                    let (anchor, new_focus) = match (state.granularity, state.origin) {
+                        (Some(kind), Some((from, to))) => {
+                            let (start, end) = state.snap_bounds(hit_byte, kind);
+                            if hit_byte < from { (to, start) } else { (from, end) }
+                        }
+                        _ => (
+                            state.selection.map(|(anchor, _)| anchor).unwrap_or(hit_byte),
+                            hit_byte,
+                        ),
+                    };
+                    if state.selection != Some((anchor, new_focus)) {
                         state.selection = Some((anchor, new_focus));
                         shell.request_redraw();
                     }
@@ -470,6 +493,8 @@ where
 
                 if state.selecting {
                     state.selecting = false;
+                    state.granularity = None;
+                    state.origin = None;
 
                     if let Some((a, b)) = state.selection
                         && a == b

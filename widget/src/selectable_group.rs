@@ -74,6 +74,13 @@ struct GroupState {
     /// repeated presses within iced's threshold escalate Single →
     /// Double → Triple.
     last_click: Option<mouse::Click>,
+    /// Granularity the running drag extends by: `None` for characters,
+    /// `Double` for whole words, `Triple` for whole lines.
+    granularity: Option<mouse::click::Kind>,
+    /// The word or line the drag started on, as its two ends. Kept
+    /// whole so a drag back past its start swings the anchor to its far
+    /// edge rather than eating into it.
+    origin: Option<((usize, usize), (usize, usize))>,
 }
 
 impl<'a, Link, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
@@ -264,7 +271,12 @@ where
 
                     let (anchor, focus, selecting) =
                         if let Some((start, end)) = word_or_line {
-                            ((focus_idx, start), (focus_idx, end), false)
+                            // The drag stays alive after a word or line
+                            // click and carries that granularity with it:
+                            // holding the button and pulling on grows the
+                            // selection whole words or whole lines at a
+                            // time.
+                            ((focus_idx, start), (focus_idx, end), true)
                         } else if extend {
                             (
                                 prior_anchor.unwrap_or((focus_idx, hit_byte)),
@@ -299,6 +311,9 @@ where
                     group.focus = Some(focus);
                     group.preferred_x = cursor_position.map(|p| p.x);
                     group.selecting = selecting;
+                    group.granularity = word_or_line.map(|_| kind);
+                    group.origin = word_or_line
+                        .map(|(start, end)| ((focus_idx, start), (focus_idx, end)));
                     group.last_click = Some(click);
                     shell.capture_event();
                     shell.request_redraw();
@@ -315,6 +330,8 @@ where
                     group.focus = None;
                     group.preferred_x = None;
                     group.selecting = false;
+                    group.granularity = None;
+                    group.origin = None;
                     group.last_click = None;
                 }
             }
@@ -324,8 +341,12 @@ where
                 if let (true, Some((anchor_idx, anchor_byte)), Some(point)) =
                     (group.selecting, group.anchor, cursor_position)
                 {
+                    let (granularity, origin) = (group.granularity, group.origin);
                     let mut focus_index = None;
                     let mut focus_byte = 0usize;
+                    // The word or line under the pointer, for a drag that
+                    // carries that granularity.
+                    let mut focus_snap: Option<(usize, usize)> = None;
                     let mut totals: Vec<(Rectangle, usize)> = Vec::new();
 
                     visit_selectables(
@@ -345,6 +366,8 @@ where
                                 let byte = state.hit_test(core::Point::ORIGIN + local).unwrap_or(0);
                                 focus_index = Some(index);
                                 focus_byte = byte;
+                                focus_snap = granularity
+                                    .map(|kind| state.snap_bounds(byte, kind));
                             }
                         },
                     );
@@ -353,6 +376,21 @@ where
                     let focus = focus_index
                         .map(|i| (i, focus_byte))
                         .or_else(|| totals.last().map(|(_, len)| (totals.len() - 1, *len)));
+
+                    // A word- or line-grained drag pins the anchor to the
+                    // far edge of the word it started on and snaps the
+                    // moving end to a word edge too.
+                    let (anchor_idx, anchor_byte, focus) =
+                        match (origin, focus_snap, focus) {
+                            (Some((from, to)), Some((start, end)), Some((idx, _))) => {
+                                if (idx, start) < from {
+                                    (to.0, to.1, Some((idx, start)))
+                                } else {
+                                    (from.0, from.1, Some((idx, end)))
+                                }
+                            }
+                            _ => (anchor_idx, anchor_byte, focus),
+                        };
 
                     if let Some((focus_idx, focus_byte)) = focus {
                         visit_selectables(
@@ -375,6 +413,7 @@ where
                         );
 
                         let group = tree.state.downcast_mut::<GroupState>();
+                        group.anchor = Some((anchor_idx, anchor_byte));
                         group.focus = Some((focus_idx, focus_byte));
                         group.preferred_x = Some(point.x);
                         shell.request_redraw();
@@ -384,6 +423,8 @@ where
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
                 let group = tree.state.downcast_mut::<GroupState>();
                 group.selecting = false;
+                group.granularity = None;
+                group.origin = None;
 
                 // Collapse zero-width "click only" selections so a
                 // stray single click doesn't leave a stale 0..0 range.
