@@ -249,6 +249,14 @@ where
         operation: &mut dyn Operation,
     ) {
         operation.container(None, layout.bounds());
+
+        // Only a button with something to do. A disabled one looks the part
+        // and swallows the press, so offering it by any other route would
+        // promise something that does not happen.
+        if self.on_press.is_some() {
+            operation.pressable(None, layout.bounds());
+        }
+
         operation.traverse(&mut |operation| {
             self.content.as_widget_mut().operate(
                 &mut tree.children[0],

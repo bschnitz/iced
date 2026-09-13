@@ -345,13 +345,36 @@ where
         _renderer: &Renderer,
         operation: &mut dyn core::widget::Operation,
     ) {
-        if !self.selectable {
+        if !self.selectable && self.on_link_click.is_none() {
             return;
         }
+
         let state = tree
             .state
             .downcast_mut::<State<Link, Renderer::Paragraph>>();
-        operation.selectable(None, layout.bounds(), state);
+
+        // A link is no widget of its own -- it is a stretch of this one's
+        // text, and only the laid-out paragraph knows where it came to
+        // rest. A span that wrapped onto a second line owns a region per
+        // line; the first is where the link begins, and that is the place
+        // to offer.
+        if self.on_link_click.is_some() {
+            let translation = layout.position() - Point::ORIGIN;
+
+            for (index, span) in self.spans.as_ref().as_ref().iter().enumerate() {
+                if span.link.is_none() {
+                    continue;
+                }
+
+                if let Some(region) = state.paragraph.span_bounds(index).first() {
+                    operation.pressable(None, *region + translation);
+                }
+            }
+        }
+
+        if self.selectable {
+            operation.selectable(None, layout.bounds(), state);
+        }
     }
 
     fn draw(

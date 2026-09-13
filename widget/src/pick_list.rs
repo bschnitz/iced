@@ -70,6 +70,7 @@ use crate::core::renderer;
 use crate::core::text::paragraph;
 use crate::core::text::{self, Text};
 use crate::core::touch;
+use crate::core::widget;
 use crate::core::widget::tree::{self, Tree};
 use crate::core::window;
 use crate::core::{
@@ -425,6 +426,18 @@ where
         };
 
         layout::Node::new(size)
+    }
+
+    fn operate(
+        &mut self,
+        _tree: &mut Tree,
+        layout: Layout<'_>,
+        _renderer: &Renderer,
+        operation: &mut dyn widget::Operation,
+    ) {
+        if self.on_select.is_some() {
+            operation.pressable(None, layout.bounds());
+        }
     }
 
     fn update(

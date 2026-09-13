@@ -310,6 +310,18 @@ where
         )
     }
 
+    fn operate(
+        &mut self,
+        _tree: &mut Tree,
+        layout: Layout<'_>,
+        _renderer: &Renderer,
+        operation: &mut dyn widget::Operation,
+    ) {
+        if self.on_toggle.is_some() {
+            operation.pressable(None, layout.bounds());
+        }
+    }
+
     fn update(
         &mut self,
         _tree: &mut Tree,

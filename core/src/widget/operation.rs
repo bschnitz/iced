@@ -54,6 +54,15 @@ pub trait Operation<T = ()>: Send {
     /// Operates on a widget that contains some text.
     fn text(&mut self, _id: Option<&Id>, _bounds: Rectangle, _text: &str) {}
 
+    /// Operates on a widget that answers a press where it stands.
+    ///
+    /// Reported by whatever a pointer can act on and a caller cannot see:
+    /// a button with something to do, a span of text carrying a link. The
+    /// bounds are the place on the screen a press would have to land, so
+    /// an application can offer that place by some other means than the
+    /// pointer.
+    fn pressable(&mut self, _id: Option<&Id>, _bounds: Rectangle) {}
+
     /// Operates on a custom widget with some state.
     fn custom(&mut self, _id: Option<&Id>, _bounds: Rectangle, _state: &mut dyn Any) {}
 
@@ -101,6 +110,10 @@ where
 
     fn text(&mut self, id: Option<&Id>, bounds: Rectangle, text: &str) {
         self.as_mut().text(id, bounds, text);
+    }
+
+    fn pressable(&mut self, id: Option<&Id>, bounds: Rectangle) {
+        self.as_mut().pressable(id, bounds);
     }
 
     fn custom(&mut self, id: Option<&Id>, bounds: Rectangle, state: &mut dyn Any) {
@@ -186,6 +199,10 @@ where
 
         fn text(&mut self, id: Option<&Id>, bounds: Rectangle, text: &str) {
             self.operation.text(id, bounds, text);
+        }
+
+        fn pressable(&mut self, id: Option<&Id>, bounds: Rectangle) {
+            self.operation.pressable(id, bounds);
         }
 
         fn custom(&mut self, id: Option<&Id>, bounds: Rectangle, state: &mut dyn Any) {
@@ -281,6 +298,10 @@ where
                     self.operation.text(id, bounds, text);
                 }
 
+                fn pressable(&mut self, id: Option<&Id>, bounds: Rectangle) {
+                    self.operation.pressable(id, bounds);
+                }
+
                 fn custom(&mut self, id: Option<&Id>, bounds: Rectangle, state: &mut dyn Any) {
                     self.operation.custom(id, bounds, state);
                 }
@@ -321,6 +342,10 @@ where
 
         fn text(&mut self, id: Option<&Id>, bounds: Rectangle, text: &str) {
             self.operation.text(id, bounds, text);
+        }
+
+        fn pressable(&mut self, id: Option<&Id>, bounds: Rectangle) {
+            self.operation.pressable(id, bounds);
         }
 
         fn custom(&mut self, id: Option<&Id>, bounds: Rectangle, state: &mut dyn Any) {
@@ -406,6 +431,10 @@ where
 
         fn text(&mut self, id: Option<&Id>, bounds: Rectangle, text: &str) {
             self.operation.text(id, bounds, text);
+        }
+
+        fn pressable(&mut self, id: Option<&Id>, bounds: Rectangle) {
+            self.operation.pressable(id, bounds);
         }
 
         fn custom(&mut self, id: Option<&Id>, bounds: Rectangle, state: &mut dyn Any) {

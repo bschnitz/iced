@@ -317,6 +317,18 @@ where
         )
     }
 
+    fn operate(
+        &mut self,
+        _tree: &mut Tree,
+        layout: Layout<'_>,
+        _renderer: &Renderer,
+        operation: &mut dyn widget::Operation,
+    ) {
+        // Unlike the others there is no disabled radio to leave out:
+        // being chosen is the whole of what one does.
+        operation.pressable(None, layout.bounds());
+    }
+
     fn update(
         &mut self,
         _tree: &mut Tree,

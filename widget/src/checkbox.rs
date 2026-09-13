@@ -463,6 +463,12 @@ where
         _renderer: &Renderer,
         operation: &mut dyn widget::Operation,
     ) {
+        // Only a checkbox that can be toggled. A disabled one is there to
+        // be read, not pressed.
+        if self.on_toggle.is_some() {
+            operation.pressable(None, layout.bounds());
+        }
+
         if let Some(label) = self.label.as_deref() {
             operation.text(None, layout.bounds(), label);
         }
