@@ -401,7 +401,8 @@ where
             && let Some((a, b)) = state.selection
         {
             let (start, end) = if a <= b { (a, b) } else { (b, a) };
-            if start < end && style.selection.a > 0.0 {
+            let selection = text::selection_color(theme, &style);
+            if start < end && selection.a > 0.0 {
                 let anchor = layout.bounds().anchor(
                     state.paragraph.min_bounds(),
                     state.paragraph.align_x(),
@@ -414,7 +415,7 @@ where
                             bounds: bounds + translation,
                             ..Default::default()
                         },
-                        style.selection,
+                        selection,
                     );
                 }
             }

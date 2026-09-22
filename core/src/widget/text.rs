@@ -191,13 +191,12 @@ where
     {
         let color = color.map(Into::into);
 
-        // Inherit the rest of the style (notably `selection`) from the
-        // theme's default class instead of `Style::default()` — which
-        // has a transparent `selection` and would silently disable
-        // selection highlights for any `text(...).color(...)` widget.
-        self.style(move |theme: &Theme| Style {
+        // The selection colour is left at its transparent default on
+        // purpose: `selection_color` reads that as "says nothing about
+        // it" and hands back the theme's own.
+        self.style(move |_theme: &Theme| Style {
             color,
-            ..theme.style(&<Theme as Catalog>::default())
+            ..Style::default()
         })
     }
 
@@ -361,7 +360,8 @@ where
             && let Some((a, b)) = state.selection
         {
             let (start, end) = if a <= b { (a, b) } else { (b, a) };
-            if start < end && style.selection.a > 0.0 {
+            let selection = selection_color(theme, &style);
+            if start < end && selection.a > 0.0 {
                 let raw = state.paragraph.raw();
                 let anchor = layout
                     .bounds()
@@ -373,7 +373,7 @@ where
                             bounds: bounds + translation,
                             ..Default::default()
                         },
-                        style.selection,
+                        selection,
                     );
                 }
             }
@@ -781,6 +781,30 @@ pub struct Style {
     pub selection: Color,
 }
 
+/// The [`Color`] a text selection is painted in.
+///
+/// A [`Style`] built out of [`Style::default`] carries a fully
+/// transparent `selection`, which would paint nothing at all. That is
+/// read as "says nothing about it" rather than "paint nothing": the
+/// theme's own colour is used instead, the same way a `color` of `None`
+/// inherits. A style that means a different colour says so by setting
+/// one.
+///
+/// Without this, every style closure that spreads [`Style::default`] to
+/// change nothing but the colour would silently turn its own selection
+/// highlight off, and the text would look unselectable while selecting
+/// perfectly well.
+pub fn selection_color<Theme>(theme: &Theme, style: &Style) -> Color
+where
+    Theme: Catalog,
+{
+    if style.selection.a > 0.0 {
+        style.selection
+    } else {
+        theme.style(&<Theme as Catalog>::default()).selection
+    }
+}
+
 /// The theme catalog of a [`Text`].
 pub trait Catalog: Sized {
     /// The item class of this [`Catalog`].
@@ -863,5 +887,32 @@ pub fn danger(theme: &Theme) -> Style {
     Style {
         color: Some(theme.seed().danger),
         selection: theme.palette().primary.weak.color,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Theme;
+
+    #[test]
+    fn a_style_saying_nothing_about_the_selection_is_given_the_theme_s() {
+        let theme = Theme::Light;
+
+        assert_eq!(
+            selection_color(&theme, &Style::default()),
+            theme.style(&<Theme as Catalog>::default()).selection,
+        );
+    }
+
+    #[test]
+    fn a_style_naming_a_selection_colour_keeps_it() {
+        let theme = Theme::Light;
+        let style = Style {
+            color: None,
+            selection: Color::from_rgb(1.0, 0.0, 0.0),
+        };
+
+        assert_eq!(selection_color(&theme, &style), style.selection);
     }
 }
